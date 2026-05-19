@@ -3,6 +3,10 @@ let video;
 let label = "等待辨識...";
 let confidence = 0;
 
+// Hand Pose 相關變數
+let handPose;
+let hands = []; // 儲存手部偵測結果
+
 // 系統狀態檢查
 let webglSupported = true;
 let videoStatus = "等待啟動..."; // "等待啟動...", "成功", "失敗"
@@ -22,7 +26,9 @@ const COOLDOWN_MS = 1500;    // 狀態切換後的冷卻時間（1.5秒），避
 const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
 
 function preload() {
-  // 取消在 preload 載入，改在 setup 以便顯示自定義進度訊息
+  // 在 preload 載入 handPose 模型
+  // imageClassifier 模型改在 setup 載入，以便顯示自定義進度訊息
+  handPose = ml5.handPose();
 }
 
 function setup() {
@@ -42,6 +48,8 @@ function setup() {
     video = createCapture(VIDEO, (stream) => {
       videoStatus = "成功";
       console.log("相機啟動成功");
+      // 影片準備好後，開始 handPose 偵測
+      handPose.detectStart(video, gotHandPose);
     });
     video.size(640, 480);
     video.hide();
@@ -67,6 +75,11 @@ function setup() {
       classifyVideo();
     }
   });
+}
+
+// handPose 偵測結果的回呼函式
+function gotHandPose(results) {
+  hands = results;
 }
 
 function classifyVideo() {
@@ -159,6 +172,39 @@ function draw() {
     translate(width, 0);
     scale(-1, 1);
     image(video, 0, 0, width, height);
+
+    // --- 繪製手部骨架 ---
+    if (hands && hands.length > 0) {
+      // 假設 video 影像被縮放到 canvas 的寬高
+      let scaleX = width / video.width;
+      let scaleY = height / video.height;
+
+      stroke(0, 255, 0); // 設定線條顏色為綠色
+      strokeWeight(3);   // 設定線條粗細
+      
+      for (let i = 0; i < hands.length; i++) {
+        let hand = hands[i];
+        let keypoints = hand.keypoints;
+
+        // 定義需要串接的關鍵點群組
+        let fingerJoints = [
+          [0, 1, 2, 3, 4],     // 大拇指
+          [5, 6, 7, 8],        // 食指
+          [9, 10, 11, 12],     // 中指
+          [13, 14, 15, 16],    // 無名指
+          [17, 18, 19, 20]     // 小拇指
+        ];
+
+        for (let joints of fingerJoints) {
+          for (let j = 0; j < joints.length - 1; j++) {
+            let pt1 = keypoints[joints[j]];
+            let pt2 = keypoints[joints[j + 1]];
+            // 繪製線條時應用縮放
+            line(pt1.x * scaleX, pt1.y * scaleY, pt2.x * scaleX, pt2.y * scaleY);
+          }
+        }
+      }
+    }
     pop();
   } else {
     // 如果影片尚未準備好，顯示等待訊息
