@@ -3,6 +3,10 @@ let video;
 let label = "等待辨識...";
 let confidence = 0;
 
+// 系統狀態檢查
+let webglSupported = true;
+let modelStatus = "等待載入..."; // "等待載入...", "載入中", "成功", "失敗"
+
 // 遊戲狀態：START (初始), PLAYING (遊戲中), RESULT (顯示結果)
 let state = 'START';
 let playerChoice = '';
@@ -17,18 +21,39 @@ const COOLDOWN_MS = 1500;    // 狀態切換後的冷卻時間（1.5秒），避
 const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
 
 function preload() {
-  // 載入 Teachable Machine 影像分類模型
-  classifier = ml5.imageClassifier(modelURL + 'model.json');
+  // 取消在 preload 載入，改在 setup 以便顯示自定義進度訊息
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
-  video = createCapture(VIDEO);
+  
+  // 1. 檢查 WebGL 支援
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) {
+    webglSupported = false;
+    console.error("此裝置不支援 WebGL");
+    return;
+  }
+
+  // 2. 初始化相機
+  video = createCapture(VIDEO, (stream) => {
+    console.log("相機啟動成功");
+  });
   video.size(640, 480);
   video.hide();
   
-  // 開始持續辨識影像
-  classifyVideo();
+  // 3. 載入模型並處理回饋
+  modelStatus = "載入中...";
+  classifier = ml5.imageClassifier(modelURL + 'model.json', (err) => {
+    if (err) {
+      console.error(err);
+      modelStatus = "失敗";
+    } else {
+      modelStatus = "成功";
+      classifyVideo();
+    }
+  });
 }
 
 function classifyVideo() {
@@ -104,6 +129,27 @@ function resetGame() {
 
 function draw() {
   background(0);
+
+  // --- 系統相容性與載入檢查介面 ---
+  if (!webglSupported) {
+    fill(255, 0, 0);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    text("❌ 您的瀏覽器不支援 WebGL\nAI 功能無法在某些舊型手機上執行", width / 2, height / 2);
+    return;
+  }
+
+  if (modelStatus === "載入中...") {
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text("🧠 模型載入中，請稍候...", width / 2, height / 2);
+    return;
+  } else if (modelStatus === "失敗") {
+    fill(255, 0, 0);
+    textAlign(CENTER, CENTER);
+    text("❌ 模型載入失敗\n請檢查 modelURL 是否正確或網路連線", width / 2, height / 2);
+    return;
+  }
 
   // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
   translate(width, 0);
