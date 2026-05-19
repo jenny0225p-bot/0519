@@ -122,7 +122,7 @@ function updateGameState() {
       lastStateChangeTime = millis();
     }
   } else if (state === 'PLAYING') {
-    const moves = ['石頭', '剪刀', '布'];
+    const moves = ['1', '2', '3']; // 修改為數字手勢標籤
     let matchedMove = moves.find(m => label.includes(m));
     if (matchedMove) {
       playerChoice = matchedMove;
@@ -140,13 +140,13 @@ function updateGameState() {
 }
 
 function calculateWinner() {
-  if (playerChoice === aiChoice) {
+  // 將字串轉為數字進行比大小
+  let p = parseInt(playerChoice);
+  let a = parseInt(aiChoice);
+
+  if (p === a) {
     resultText = "平手！";
-  } else if (
-    (playerChoice === '石頭' && aiChoice === '剪刀') ||
-    (playerChoice === '剪刀' && aiChoice === '布') ||
-    (playerChoice === '布' && aiChoice === '石頭')
-  ) {
+  } else if (p > a) {
     resultText = "你贏了！✨";
   } else {
     resultText = "你輸了... 😭";
@@ -292,13 +292,13 @@ function draw() {
     rect(0, height - 100, width, 100);
     fill(255);
     textSize(28);
-    text("請比出 👌 手勢開始遊戲", width / 2, height - 50);
+    text("請比出 👌 手勢開始數字比大小", width / 2, height - 50);
   } else if (state === 'PLAYING') {
     fill(0, 0, 0, 150);
     rect(0, height - 100, width, 100);
     fill(255, 255, 0);
     textSize(28);
-    text("請出拳！(剪刀、石頭、布)", width / 2, height - 50);
+    text("請出數字！(1、2、3)", width / 2, height - 50);
   } else if (state === 'RESULT') {
     // 結果狀態下，使用半透明大畫面凸顯勝負，但依然看得到後方相機
     fill(0, 0, 0, 180);
