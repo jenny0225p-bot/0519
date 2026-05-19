@@ -176,52 +176,59 @@ function draw() {
     return;
   }
 
-  // 如果相機尚未準備好，不執行後續畫圖動作
-  if (videoStatus !== "成功") return;
-  if (modelStatus !== "成功") return;
-
-  // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
-  translate(width, 0);
-  scale(-1, 1);
-  image(video, 0, 0, width, height);
-  
-  // 恢復正常坐標系以繪製 UI 文字
-  scale(-1, 1);
-  translate(-width, 0);
-
-  // 繪製半透明 UI 覆蓋層
-  fill(0, 0, 0, 150);
-  rect(0, 0, width, height);
-  
-  textAlign(CENTER, CENTER);
-  fill(255);
-  
-  if (state === 'START') {
-    textSize(42);
-    text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
-  } else if (state === 'PLAYING') {
-    textSize(42);
-    text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
-  } else if (state === 'RESULT') {
-    textSize(72);
-    fill(255, 255, 0);
-    text(resultText, width / 2, height / 2 - 80);
+  // --- 遊戲畫面繪製邏輯 ---
+  // 只有當影片有足夠數據時才繪製攝影機畫面和遊戲 UI
+  // readyState >= 2 (HAVE_CURRENT_DATA) 表示影片元素已準備好至少一幀數據
+  if (video && video.elt && video.elt.readyState >= 2) { 
+    // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
+    translate(width, 0);
+    scale(-1, 1);
+    image(video, 0, 0, width, height);
     
-    textSize(42);
+    // 恢復正常坐標系以繪製 UI 文字
+    scale(-1, 1);
+    translate(-width, 0);
+
+    // 繪製半透明 UI 覆蓋層
+    fill(0, 0, 0, 150);
+    rect(0, 0, width, height);
+    
+    textAlign(CENTER, CENTER);
     fill(255);
-    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
     
-    textSize(28);
-    fill(200);
-    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
-  }
+    if (state === 'START') {
+      textSize(42);
+      text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
+    } else if (state === 'PLAYING') {
+      textSize(42);
+      text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
+    } else if (state === 'RESULT') {
+      textSize(72);
+      fill(255, 255, 0);
+      text(resultText, width / 2, height / 2 - 80);
+      
+      textSize(42);
+      fill(255);
+      text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
+      
+      textSize(28);
+      fill(200);
+      text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
+    }
 
-  // 顯示冷卻進度條（視覺輔助）
-  let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
-  if (progress < 1.0) {
-    noStroke();
-    fill(0, 255, 0, 100);
-    rect(0, height - 10, width * progress, 10);
+    // 顯示冷卻進度條（視覺輔助）
+    let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
+    if (progress < 1.0) {
+      noStroke();
+      fill(0, 255, 0, 100);
+      rect(0, height - 10, width * progress, 10);
+    }
+  } else {
+    // 如果影片尚未準備好，顯示等待訊息
+    fill(255, 255, 0);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    text("🎥 正在等待攝影機畫面...", width / 2, height / 2 + 50);
   }
 
   // 左上角強化顯示目前的辨識狀態（方便除錯）
