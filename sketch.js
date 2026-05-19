@@ -28,7 +28,7 @@ const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/'
 function preload() {
   // 在 preload 載入 handPose 模型
   // imageClassifier 模型改在 setup 載入，以便顯示自定義進度訊息
-  handPose = ml5.handPose();
+  handPose = ml5.handPose({ flipped: true });
 }
 
 function setup() {
@@ -172,6 +172,7 @@ function draw() {
     translate(width, 0);
     scale(-1, 1);
     image(video, 0, 0, width, height);
+    pop(); // 結束影片的鏡像轉換，因為 ml5({flipped: true}) 已處理好座標
 
     // --- 繪製手部骨架 ---
     if (hands && hands.length > 0) {
@@ -179,14 +180,14 @@ function draw() {
       let scaleX = width / video.width;
       let scaleY = height / video.height;
 
-      stroke(0, 255, 0); // 設定線條顏色為綠色
-      strokeWeight(3);   // 設定線條粗細
-      
       for (let i = 0; i < hands.length; i++) {
         let hand = hands[i];
         let keypoints = hand.keypoints;
 
-        // 定義需要串接的關鍵點群組
+        // 根據左右手設定顏色 (Left: 粉紅, Right: 黃色)
+        let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
+
+        // 定義需要連線的指節群組
         let fingerJoints = [
           [0, 1, 2, 3, 4],     // 大拇指
           [5, 6, 7, 8],        // 食指
@@ -195,17 +196,26 @@ function draw() {
           [17, 18, 19, 20]     // 小拇指
         ];
 
+        // 繪製骨架連線
+        stroke(handColor);
+        strokeWeight(4);
+        noFill();
         for (let joints of fingerJoints) {
           for (let j = 0; j < joints.length - 1; j++) {
             let pt1 = keypoints[joints[j]];
             let pt2 = keypoints[joints[j + 1]];
-            // 繪製線條時應用縮放
             line(pt1.x * scaleX, pt1.y * scaleY, pt2.x * scaleX, pt2.y * scaleY);
           }
         }
+
+        // 繪製關鍵點圓圈
+        noStroke();
+        fill(handColor);
+        for (let keypoint of keypoints) {
+          circle(keypoint.x * scaleX, keypoint.y * scaleY, 12);
+        }
       }
     }
-    pop();
   } else {
     // 如果影片尚未準備好，顯示等待訊息
     fill(255, 255, 0);
