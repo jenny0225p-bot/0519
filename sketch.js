@@ -152,6 +152,26 @@ function draw() {
     return;
   }
 
+  // --- 遊戲畫面繪製邏輯 ---
+  // 只有當影片有足夠數據時才繪製攝影機畫面
+  // readyState >= 2 (HAVE_CURRENT_DATA) 表示影片元素已準備好至少一幀數據
+  if (video && video.elt && video.elt.readyState >= 2) { 
+    // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
+    translate(width, 0);
+    scale(-1, 1);
+    image(video, 0, 0, width, height);
+    
+    // 恢復正常坐標系以繪製 UI 文字
+    scale(-1, 1);
+    translate(-width, 0);
+  } else {
+    // 如果影片尚未準備好，顯示等待訊息
+    fill(255, 255, 0);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    text("🎥 正在等待攝影機畫面...", width / 2, height / 2 + 50);
+  }
+
   if (videoStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
@@ -169,25 +189,12 @@ function draw() {
     fill(255);
     textAlign(CENTER, CENTER);
     text("🧠 模型載入中，請稍候...", width / 2, height / 2);
-  } else if (modelStatus === "失敗") {
+  } else if (modelStatus === "失敗") { // 如果模型載入失敗，也顯示錯誤訊息並停止遊戲邏輯
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
     text("❌ 模型載入失敗\n請檢查 modelURL 是否正確或網路連線", width / 2, height / 2);
-    return;
+    return; 
   }
-
-  // --- 遊戲畫面繪製邏輯 ---
-  // 只有當影片有足夠數據時才繪製攝影機畫面和遊戲 UI
-  // readyState >= 2 (HAVE_CURRENT_DATA) 表示影片元素已準備好至少一幀數據
-  if (video && video.elt && video.elt.readyState >= 2) { 
-    // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
-    translate(width, 0);
-    scale(-1, 1);
-    image(video, 0, 0, width, height);
-    
-    // 恢復正常坐標系以繪製 UI 文字
-    scale(-1, 1);
-    translate(-width, 0);
 
     // 繪製半透明 UI 覆蓋層
     fill(0, 0, 0, 150);
