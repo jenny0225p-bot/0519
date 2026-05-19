@@ -5,6 +5,7 @@ let confidence = 0;
 
 // 系統狀態檢查
 let webglSupported = true;
+let videoStatus = "等待啟動..."; // "等待啟動...", "成功", "失敗"
 let modelStatus = "等待載入..."; // "等待載入...", "載入中", "成功", "失敗"
 
 // 遊戲狀態：START (初始), PLAYING (遊戲中), RESULT (顯示結果)
@@ -37,13 +38,25 @@ function setup() {
   }
 
   // 2. 初始化相機
-  video = createCapture(VIDEO, (stream) => {
-    console.log("相機啟動成功");
-  });
-  video.size(640, 480);
-  video.hide();
-  
+  try {
+    video = createCapture(VIDEO, (stream) => {
+      videoStatus = "成功";
+      console.log("相機啟動成功");
+    });
+    video.size(640, 480);
+    video.hide();
+  } catch (e) {
+    videoStatus = "失敗";
+    console.error("無法存取相機:", e);
+  }
+
   // 3. 載入模型並處理回饋
+  // 檢查是否已填寫正確的 URL
+  if (modelURL.includes("YOUR_MODEL_ID")) {
+    modelStatus = "未設定URL";
+    return;
+  }
+
   modelStatus = "載入中...";
   classifier = ml5.imageClassifier(modelURL + 'model.json', (err) => {
     if (err) {
@@ -139,17 +152,33 @@ function draw() {
     return;
   }
 
-  if (modelStatus === "載入中...") {
+  if (videoStatus === "失敗") {
+    fill(255, 0, 0);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    text("❌ 找不到攝影機\n請確認硬體連接或開啟相機權限", width / 2, height / 2);
+    return;
+  }
+
+  if (modelStatus === "未設定URL") {
+    fill(255, 255, 0);
+    textAlign(CENTER, CENTER);
+    text("⚠️ 請先在程式碼中替換 modelURL\n為你在 Teachable Machine 訓練好的連結", width / 2, height / 2);
+    return;
+  } else if (modelStatus === "載入中...") {
     fill(255);
     textAlign(CENTER, CENTER);
     text("🧠 模型載入中，請稍候...", width / 2, height / 2);
-    return;
   } else if (modelStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
     text("❌ 模型載入失敗\n請檢查 modelURL 是否正確或網路連線", width / 2, height / 2);
     return;
   }
+
+  // 如果相機尚未準備好，不執行後續畫圖動作
+  if (videoStatus !== "成功") return;
+  if (modelStatus !== "成功") return;
 
   // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
   translate(width, 0);
