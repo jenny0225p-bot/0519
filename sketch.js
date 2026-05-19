@@ -28,13 +28,13 @@ const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/'
 
 function preload() {
   // 在 preload 載入 handPose 模型
-  handPose = ml5.handPose({ flipped: true });
+  handPose = ml5.handPose({ flipped: true }); // 啟用鏡像偵測
 }
 
 function setup() {
   createCanvas(640, 480); // 固定畫布大小與攝影機一致，或改用視窗大小
   
-  // 1. 檢查 WebGL 支援
+  // 檢查 WebGL 支援
   const canvas = document.createElement('canvas');
   const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
   if (!gl) {
@@ -43,18 +43,18 @@ function setup() {
     return;
   }
 
-  // 2. 初始化相機
+  // 1. 初始化相機 (加入鏡像設定)
   try {
-    video = createCapture(VIDEO, (stream) => {
+    video = createCapture(VIDEO, { flipped: true }, (stream) => {
       videoStatus = "成功";
       console.log("相機啟動成功");
       // 影片準備好後，開始 handPose 偵測
-      handPose.detectStart(video, gotHandPose);
+      handPose.detectStart(video, gotHands);
     });
     video.size(640, 480);
     video.hide();
   } catch (e) {
-    videoStatus = "失敗";
+    videoStatus = "失敗"; 
     console.error("無法存取相機:", e);
   }
 
@@ -77,8 +77,8 @@ function setup() {
 }
 
 // handPose 偵測結果的回呼函式
-function gotHandPose(results) {
-  hands = results;
+function gotHands(results) {
+  hands = results; // 更新偵測到的手部資料
 }
 
 function classifyVideo() {
@@ -170,67 +170,73 @@ function draw() {
   // --- 1. 繪製攝影機畫面與骨架 ---
   if (video && video.elt && video.elt.readyState >= 2) {
     push();
-    // 水平翻轉畫面，呈現鏡像效果
-    translate(width, 0);
-    scale(-1, 1);
+    // 因為 createCapture 已設定 flipped: true，這裡直接畫即可
     image(video, 0, 0, width, height);
-    pop(); 
 
-    // 繪製手部骨架
-    if (hands && hands.length > 0) {
+    // --- 繪製手部骨架 (結合您提供的邏輯) ---
+    if (hands.length > 0) {
       let scaleX = width / video.width;
       let scaleY = height / video.height;
 
-      for (let i = 0; i < hands.length; i++) {
-        let hand = hands[i];
-        let keypoints = hand.keypoints;
+      for (let hand of hands) {
+        if (hand.confidence > 0.1) {
+          let keypoints = hand.keypoints;
+          
+          // 根據左右手設定顏色 (Left: 粉紅, Right: 黃色)
+          let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
 
-        // 💡 修正：因為畫布水平翻轉了，手部關鍵點的 X 軸座標也必須做鏡像對位轉換
-        let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
+          // 1. 繪製線條連線 (依照要求: 0-4, 5-8, 9-12, 13-16, 17-20)
+          stroke(handColor);
+          strokeWeight(3);
+          
+          // 定義手指關鍵點區間
+          let fingerParts = [
+            [0, 1, 2, 3, 4],    // 大拇指
+            [5, 6, 7, 8],       // 食指
+            [9, 10, 11, 12],    // 中指
+            [13, 14, 15, 16],   // 無名指
+            [17, 18, 19, 20]    // 小拇指
+          ];
 
-        let fingerJoints = [
-          [0, 1, 2, 3, 4],     // 大拇指
-          [5, 6, 7, 8],        // 食指
-          [9, 10, 11, 12],     // 中指
-          [13, 14, 15, 16],    // 無名指
-          [17, 18, 19, 20]     // 小拇指
-        ];
-
-        // 繪製骨架連線
-        stroke(handColor);
-        strokeWeight(4);
-        noFill();
-        for (let joints of fingerJoints) {
-          for (let j = 0; j < joints.length - 1; j++) {
-            let pt1 = keypoints[joints[j]];
-            let pt2 = keypoints[joints[j + 1]];
-            // 轉換 X 座標以符合鏡像： width - (x * scaleX)
-            line(width - (pt1.x * scaleX), pt1.y * scaleY, width - (pt2.x * scaleX), pt2.y * scaleY);
+          for (let part of fingerParts) {
+            for (let j = 0; j < part.length - 1; j++) {
+              let p1 = keypoints[part[j]];
+              let p2 = keypoints[part[j + 1]];
+              line(p1.x * scaleX, p1.y * scaleY, p2.x * scaleX, p2.y * scaleY);
+            }
           }
-        }
 
-        // 繪製關鍵點圓圈
-        noStroke();
-        fill(handColor);
-        for (let keypoint of keypoints) {
-          circle(width - (keypoint.x * scaleX), keypoint.y * scaleY, 12);
+          // 2. 繪製圓圈
+          noStroke();
+          fill(handColor);
+          for (let i = 0; i < keypoints.length; i++) {
+            let keypoint = keypoints[i];
+            circle(keypoint.x * scaleX, keypoint.y * scaleY, 10);
+          }
         }
       }
     }
+    pop(); 
   } else {
     fill(255, 255, 0);
     textAlign(CENTER, CENTER);
     textSize(24);
     text("🎥 正在等待攝影機畫面...", width / 2, height / 2);
+    
+    // 如果 WebGPU 警告導致延遲，這裡提供一個手動啟動的提示
+    if (frameCount > 300) { // 如果 5 秒後還沒畫面
+      textSize(16);
+      text("若畫面長時間未出現，請檢查攝影機權限或重新整理", width / 2, height / 2 + 40);
+    }
     return;
   }
 
-  // --- 2. 系統狀態提示 ---
+  // --- 2. 模型狀態提示 ---
   if (videoStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
     textSize(24);
-    text("❌ 找不到攝影機\n請確認權限設定", width / 2, height / 2);
+    text("❌ 找不到攝影機\n請確認權限設定並使用 HTTPS", width / 2, height / 2);
     return;
   }
 
