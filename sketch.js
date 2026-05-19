@@ -1,3 +1,4 @@
+// Hand Pose Detection with ml5.js & Teachable Machine
 let classifier;
 let video;
 let label = "等待辨識...";
@@ -22,17 +23,16 @@ let resultText = '';
 let lastStateChangeTime = 0; // 記錄狀態切換時間
 const COOLDOWN_MS = 1500;    // 狀態切換後的冷卻時間（1.5秒），避免連續觸發
 
-// TODO: 請將此處替換為您在 Teachable Machine 訓練好的模型連結
+// ⚠️ 請記得將此處替換為您在 Teachable Machine 訓練好的模型連結
 const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
 
 function preload() {
   // 在 preload 載入 handPose 模型
-  // imageClassifier 模型改在 setup 載入，以便顯示自定義進度訊息
   handPose = ml5.handPose({ flipped: true });
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  createCanvas(640, 480); // 固定畫布大小與攝影機一致，或改用視窗大小
   
   // 1. 檢查 WebGL 支援
   const canvas = document.createElement('canvas');
@@ -59,7 +59,6 @@ function setup() {
   }
 
   // 3. 載入模型並處理回饋
-  // 檢查是否已填寫正確的 URL
   if (modelURL.includes("YOUR_MODEL_ID")) {
     modelStatus = "未設定URL";
     return;
@@ -83,7 +82,9 @@ function gotHandPose(results) {
 }
 
 function classifyVideo() {
-  classifier.classify(video, gotResult);
+  if (videoStatus === "成功" && modelStatus === "成功") {
+    classifier.classify(video, gotResult);
+  }
 }
 
 function gotResult(results, error) {
@@ -91,11 +92,13 @@ function gotResult(results, error) {
     console.error(error);
     return;
   }
-  label = results[0].label;
-  confidence = results[0].confidence;
-  
-  // 根據辨識結果更新遊戲邏輯
-  updateGameState();
+  if (results && results.length > 0) {
+    label = results[0].label;
+    confidence = results[0].confidence;
+    
+    // 根據辨識結果更新遊戲邏輯
+    updateGameState();
+  }
   
   // 繼續下一幀的辨識
   classifyVideo();
@@ -109,13 +112,12 @@ function updateGameState() {
   if (confidence < 0.7) return;
 
   if (state === 'START') {
-    if (label.includes('👌')) { // 使用 includes 增加相容性（處理不同膚色編碼）
+    if (label.includes('👌')) { 
       state = 'PLAYING';
       lastStateChangeTime = millis();
     }
   } else if (state === 'PLAYING') {
     const moves = ['石頭', '剪刀', '布'];
-    // 檢查標籤是否包含在 moves 陣列中
     let matchedMove = moves.find(m => label.includes(m));
     if (matchedMove) {
       playerChoice = matchedMove;
@@ -125,7 +127,7 @@ function updateGameState() {
       lastStateChangeTime = millis();
     }
   } else if (state === 'RESULT') {
-    if (label.includes('🤟')) { // 偵測到 🤟 手勢回到主畫面
+    if (label.includes('🤟')) { 
       resetGame();
       lastStateChangeTime = millis();
     }
@@ -156,27 +158,26 @@ function resetGame() {
 function draw() {
   background(0);
 
-  // --- 系統相容性與載入檢查介面 ---
+  // --- 系統相容性檢查 ---
   if (!webglSupported) {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
     textSize(24);
-    text("❌ 您的瀏覽器不支援 WebGL\nAI 功能無法在某些舊型手機上執行", width / 2, height / 2);
+    text("❌ 您的瀏覽器不支援 WebGL\nAI 功能無法執行", width / 2, height / 2);
     return;
   }
 
-  // --- 基礎畫面：相機畫面優先顯示 ---
+  // --- 1. 繪製攝影機畫面與骨架 ---
   if (video && video.elt && video.elt.readyState >= 2) {
     push();
-    // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
+    // 水平翻轉畫面，呈現鏡像效果
     translate(width, 0);
     scale(-1, 1);
     image(video, 0, 0, width, height);
-    pop(); // 結束影片的鏡像轉換，因為 ml5({flipped: true}) 已處理好座標
+    pop(); 
 
-    // --- 繪製手部骨架 ---
+    // 繪製手部骨架
     if (hands && hands.length > 0) {
-      // 假設 video 影像被縮放到 canvas 的寬高
       let scaleX = width / video.width;
       let scaleY = height / video.height;
 
@@ -184,10 +185,9 @@ function draw() {
         let hand = hands[i];
         let keypoints = hand.keypoints;
 
-        // 根據左右手設定顏色 (Left: 粉紅, Right: 黃色)
+        // 💡 修正：因為畫布水平翻轉了，手部關鍵點的 X 軸座標也必須做鏡像對位轉換
         let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
 
-        // 定義需要連線的指節群組
         let fingerJoints = [
           [0, 1, 2, 3, 4],     // 大拇指
           [5, 6, 7, 8],        // 食指
@@ -204,7 +204,8 @@ function draw() {
           for (let j = 0; j < joints.length - 1; j++) {
             let pt1 = keypoints[joints[j]];
             let pt2 = keypoints[joints[j + 1]];
-            line(pt1.x * scaleX, pt1.y * scaleY, pt2.x * scaleX, pt2.y * scaleY);
+            // 轉換 X 座標以符合鏡像： width - (x * scaleX)
+            line(width - (pt1.x * scaleX), pt1.y * scaleY, width - (pt2.x * scaleX), pt2.y * scaleY);
           }
         }
 
@@ -212,82 +213,102 @@ function draw() {
         noStroke();
         fill(handColor);
         for (let keypoint of keypoints) {
-          circle(keypoint.x * scaleX, keypoint.y * scaleY, 12);
+          circle(width - (keypoint.x * scaleX), keypoint.y * scaleY, 12);
         }
       }
     }
   } else {
-    // 如果影片尚未準備好，顯示等待訊息
     fill(255, 255, 0);
     textAlign(CENTER, CENTER);
     textSize(24);
-    text("🎥 正在等待攝影機畫面...", width / 2, height / 2 + 50);
+    text("🎥 正在等待攝影機畫面...", width / 2, height / 2);
+    return;
   }
 
-  // --- 系統狀態檢查與提示 ---
+  // --- 2. 系統狀態提示 ---
   if (videoStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
     textSize(24);
-    text("❌ 找不到攝影機\n請確認硬體連接或開啟相機權限", width / 2, height / 2);
+    text("❌ 找不到攝影機\n請確認權限設定", width / 2, height / 2);
     return;
   }
 
   if (modelStatus === "未設定URL") {
     fill(255, 255, 0);
+    rectMode(CENTER);
+    fill(0, 0, 0, 180);
+    rect(width/2, height/2, 500, 100, 10);
+    fill(255, 255, 0);
     textAlign(CENTER, CENTER);
+    textSize(18);
     text("⚠️ 請先在程式碼中替換 modelURL\n為你在 Teachable Machine 訓練好的連結", width / 2, height / 2);
     return;
   } else if (modelStatus === "載入中...") {
+    fill(0, 0, 0, 150);
+    rect(0, 0, width, height);
     fill(255);
     textAlign(CENTER, CENTER);
+    textSize(24);
     text("🧠 模型載入中，請稍候...", width / 2, height / 2);
-    return; // 模型載入中暫停遊戲 UI
-  } else if (modelStatus === "失敗") { // 如果模型載入失敗，也顯示錯誤訊息並停止遊戲邏輯
+    return; 
+  } else if (modelStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
-    text("❌ 模型載入失敗\n請檢查 modelURL 是否正確或網路連線", width / 2, height / 2);
+    textSize(24);
+    text("❌ 模型載入失敗\n請檢查 URL 或網路連線", width / 2, height / 2);
     return; 
   }
 
-  // --- 遊戲互動 UI (僅在相機與模型都成功時顯示) ---
-  fill(0, 0, 0, 150);
-  rect(0, 0, width, height);
+  // --- 3. 遊戲互動 UI (改為「局部黑色遮罩」或降低透明度，避免全畫面被蓋死) ---
+  // 上方黑條：顯示辨識偵測狀態
+  noStroke();
+  fill(0, 0, 0, 120);
+  rect(0, 0, width, 50);
   
+  textAlign(LEFT, CENTER);
+  textSize(16);
+  fill(0, 255, 0);
+  text(`[AI 偵測狀態] 當前特徵: ${label}  |  信心度: ${(confidence * 100).toFixed(1)}%`, 20, 25);
+
+  // 中央/下方遊戲提示
   textAlign(CENTER, CENTER);
-  fill(255);
   
   if (state === 'START') {
-    textSize(42);
-    text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
-  } else if (state === 'PLAYING') {
-    textSize(42);
-    text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
-  } else if (state === 'RESULT') {
-    textSize(72);
-    fill(255, 255, 0);
-    text(resultText, width / 2, height / 2 - 80);
-    
-    textSize(42);
+    fill(0, 0, 0, 150);
+    rect(0, height - 100, width, 100);
     fill(255);
-    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
-    
     textSize(28);
+    text("請比出 👌 手勢開始遊戲", width / 2, height - 50);
+  } else if (state === 'PLAYING') {
+    fill(0, 0, 0, 150);
+    rect(0, height - 100, width, 100);
+    fill(255, 255, 0);
+    textSize(28);
+    text("請出拳！(剪刀、石頭、布)", width / 2, height - 50);
+  } else if (state === 'RESULT') {
+    // 結果狀態下，使用半透明大畫面凸顯勝負，但依然看得到後方相機
+    fill(0, 0, 0, 180);
+    rect(0, 50, width, height - 50);
+    
+    textSize(64);
+    fill(255, 215, 0);
+    text(resultText, width / 2, height / 2 - 60);
+    
+    textSize(32);
+    fill(255);
+    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2 + 20);
+    
+    textSize(20);
     fill(200);
-    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
+    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 90);
   }
 
-  // 顯示冷卻進度條（視覺輔助）
+  // 4. 顯示冷卻進度條
   let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
   if (progress < 1.0) {
     noStroke();
-    fill(0, 255, 0, 100);
-    rect(0, height - 10, width * progress, 10);
+    fill(0, 255, 0, 200);
+    rect(0, height - 8, width * progress, 8);
   }
-
-  // 左上角強化顯示目前的辨識狀態（方便除錯）
-  textAlign(LEFT, TOP);
-  textSize(20);
-  fill(0, 255, 0);
-  text(`偵測中: [${label}] 信心度: ${(confidence * 100).toFixed(1)}%`, 20, 20);
 }
