@@ -9,6 +9,10 @@ let playerChoice = '';
 let aiChoice = '';
 let resultText = '';
 
+// 新增控制變數
+let lastStateChangeTime = 0; // 記錄狀態切換時間
+const COOLDOWN_MS = 1500;    // 狀態切換後的冷卻時間（1.5秒），避免連續觸發
+
 // TODO: 請將此處替換為您在 Teachable Machine 訓練好的模型連結
 const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
 
@@ -47,24 +51,32 @@ function gotResult(results, error) {
 }
 
 function updateGameState() {
-  // 設定信心門檻，避免誤判 (0.8 表示 80% 信心)
-  if (confidence < 0.8) return;
+  // 如果還在冷卻時間內，不處理新狀態
+  if (millis() - lastStateChangeTime < COOLDOWN_MS) return;
+
+  // 設定信心門檻，調整為 0.7 提高靈敏度
+  if (confidence < 0.7) return;
 
   if (state === 'START') {
-    if (label === '👌🏻') { // 偵測到 OK 手勢開始遊戲
+    if (label.includes('👌')) { // 使用 includes 增加相容性（處理不同膚色編碼）
       state = 'PLAYING';
+      lastStateChangeTime = millis();
     }
   } else if (state === 'PLAYING') {
     const moves = ['石頭', '剪刀', '布'];
-    if (moves.includes(label)) {
-      playerChoice = label;
+    // 檢查標籤是否包含在 moves 陣列中
+    let matchedMove = moves.find(m => label.includes(m));
+    if (matchedMove) {
+      playerChoice = matchedMove;
       aiChoice = random(moves); // AI 隨機出拳
       calculateWinner();
       state = 'RESULT';
+      lastStateChangeTime = millis();
     }
   } else if (state === 'RESULT') {
-    if (label === '🤟🏻') { // 偵測到 🤟🏻 手勢回到主畫面
+    if (label.includes('🤟')) { // 偵測到 🤟 手勢回到主畫面
       resetGame();
+      lastStateChangeTime = millis();
     }
   }
 }
@@ -111,27 +123,35 @@ function draw() {
   
   if (state === 'START') {
     textSize(42);
-    text("請比出 👌🏻 手勢開始遊戲", width / 2, height / 2);
+    text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
   } else if (state === 'PLAYING') {
     textSize(42);
     text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
   } else if (state === 'RESULT') {
-    textSize(64);
+    textSize(72);
     fill(255, 255, 0);
     text(resultText, width / 2, height / 2 - 80);
     
-    textSize(36);
+    textSize(42);
     fill(255);
     text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
     
-    textSize(24);
+    textSize(28);
     fill(200);
-    text("比出 🤟🏻 手勢回到主畫面", width / 2, height / 2 + 100);
+    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
   }
 
-  // 左上角顯示目前的辨識狀態（方便除錯）
+  // 顯示冷卻進度條（視覺輔助）
+  let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
+  if (progress < 1.0) {
+    noStroke();
+    fill(0, 255, 0, 100);
+    rect(0, height - 10, width * progress, 10);
+  }
+
+  // 左上角強化顯示目前的辨識狀態（方便除錯）
   textAlign(LEFT, TOP);
-  textSize(16);
+  textSize(20);
   fill(0, 255, 0);
-  text(`辨識結果: ${label} (${(confidence * 100).toFixed(0)}%)`, 20, 20);
+  text(`偵測中: [${label}] 信心度: ${(confidence * 100).toFixed(1)}%`, 20, 20);
 }
