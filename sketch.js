@@ -32,7 +32,7 @@ function preload() {
 }
 
 function setup() {
-  createCanvas(640, 480); // 固定畫布大小與攝影機一致，或改用視窗大小
+  createCanvas(windowWidth, windowHeight); // 改為全螢幕畫布
   
   // 檢查 WebGL 支援
   const canvas = document.createElement('canvas');
@@ -102,6 +102,11 @@ function gotResult(results, error) {
   
   // 繼續下一幀的辨識
   classifyVideo();
+}
+
+// 當視窗大小改變（如手機轉向）時，自動調整畫布大小
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
 
 function updateGameState() {
@@ -219,6 +224,8 @@ function draw() {
     pop(); 
   } else {
     fill(255, 255, 0);
+    // 即使沒有攝影機畫面，也要顯示背景，避免手機瀏覽器出現奇怪的殘影
+    background(0);
     textAlign(CENTER, CENTER);
     textSize(24);
     text("🎥 正在等待攝影機畫面...", width / 2, height / 2);
