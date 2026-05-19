@@ -152,18 +152,14 @@ function draw() {
     return;
   }
 
-  // --- 遊戲畫面繪製邏輯 ---
-  // 只有當影片有足夠數據時才繪製攝影機畫面
-  // readyState >= 2 (HAVE_CURRENT_DATA) 表示影片元素已準備好至少一幀數據
-  if (video && video.elt && video.elt.readyState >= 2) { 
+  // --- 基礎畫面：相機畫面優先顯示 ---
+  if (video && video.elt && video.elt.readyState >= 2) {
+    push();
     // 繪製攝影機影像（水平翻轉，讓玩家像照鏡子一樣方便對位）
     translate(width, 0);
     scale(-1, 1);
     image(video, 0, 0, width, height);
-    
-    // 恢復正常坐標系以繪製 UI 文字
-    scale(-1, 1);
-    translate(-width, 0);
+    pop();
   } else {
     // 如果影片尚未準備好，顯示等待訊息
     fill(255, 255, 0);
@@ -172,6 +168,7 @@ function draw() {
     text("🎥 正在等待攝影機畫面...", width / 2, height / 2 + 50);
   }
 
+  // --- 系統狀態檢查與提示 ---
   if (videoStatus === "失敗") {
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
@@ -189,6 +186,7 @@ function draw() {
     fill(255);
     textAlign(CENTER, CENTER);
     text("🧠 模型載入中，請稍候...", width / 2, height / 2);
+    return; // 模型載入中暫停遊戲 UI
   } else if (modelStatus === "失敗") { // 如果模型載入失敗，也顯示錯誤訊息並停止遊戲邏輯
     fill(255, 0, 0);
     textAlign(CENTER, CENTER);
@@ -196,46 +194,39 @@ function draw() {
     return; 
   }
 
-    // 繪製半透明 UI 覆蓋層
-    fill(0, 0, 0, 150);
-    rect(0, 0, width, height);
-    
-    textAlign(CENTER, CENTER);
-    fill(255);
-    
-    if (state === 'START') {
-      textSize(42);
-      text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
-    } else if (state === 'PLAYING') {
-      textSize(42);
-      text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
-    } else if (state === 'RESULT') {
-      textSize(72);
-      fill(255, 255, 0);
-      text(resultText, width / 2, height / 2 - 80);
-      
-      textSize(42);
-      fill(255);
-      text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
-      
-      textSize(28);
-      fill(200);
-      text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
-    }
-
-    // 顯示冷卻進度條（視覺輔助）
-    let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
-    if (progress < 1.0) {
-      noStroke();
-      fill(0, 255, 0, 100);
-      rect(0, height - 10, width * progress, 10);
-    }
-  } else {
-    // 如果影片尚未準備好，顯示等待訊息
+  // --- 遊戲互動 UI (僅在相機與模型都成功時顯示) ---
+  fill(0, 0, 0, 150);
+  rect(0, 0, width, height);
+  
+  textAlign(CENTER, CENTER);
+  fill(255);
+  
+  if (state === 'START') {
+    textSize(42);
+    text("請比出 👌 手勢開始遊戲", width / 2, height / 2);
+  } else if (state === 'PLAYING') {
+    textSize(42);
+    text("請出拳！(剪刀、石頭、布)", width / 2, height / 2);
+  } else if (state === 'RESULT') {
+    textSize(72);
     fill(255, 255, 0);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("🎥 正在等待攝影機畫面...", width / 2, height / 2 + 50);
+    text(resultText, width / 2, height / 2 - 80);
+    
+    textSize(42);
+    fill(255);
+    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2);
+    
+    textSize(28);
+    fill(200);
+    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 120);
+  }
+
+  // 顯示冷卻進度條（視覺輔助）
+  let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
+  if (progress < 1.0) {
+    noStroke();
+    fill(0, 255, 0, 100);
+    rect(0, height - 10, width * progress, 10);
   }
 
   // 左上角強化顯示目前的辨識狀態（方便除錯）
