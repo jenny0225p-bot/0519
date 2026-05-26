@@ -185,7 +185,7 @@ function runGameLogic(gesture) {
     fill(255, 215, 0);
     textSize(160);
     drawingContext.shadowBlur = 20;
-    drawingContext.shadowColor = 'white';
+    drawingContext.shadowColor = '#ffffff';
     text(countdown, width/2, height/2);
     drawingContext.shadowBlur = 0;
   } else {
@@ -205,7 +205,7 @@ function runGameLogic(gesture) {
     push();
     let flicker = map(sin(frameCount * 0.4), -1, 1, 100, 255); // 快速閃爍
     drawingContext.shadowBlur = 25; // 發光半徑
-    drawingContext.shadowColor = color(255, 255, 0); // 發光顏色 (黃色)
+    drawingContext.shadowColor = 'rgba(255, 255, 0, 1)'; // 發光顏色 (黃色字串)
     textSize(48); // 稍微放大更醒目
     fill(255, 255, 0, flicker); // 套用閃爍透明度
     text(message, width/2, height/2 + 100);
