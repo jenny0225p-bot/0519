@@ -58,7 +58,61 @@ function setup() {
 // 當視窗調整大小時，更新畫布與視訊尺寸
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+<<<<<<< HEAD
   video.size(windowWidth, windowHeight);
+=======
+}
+
+function updateGameState() {
+  // 如果還在冷卻時間內，不處理新狀態
+  if (millis() - lastStateChangeTime < COOLDOWN_MS) return;
+
+  // 設定信心門檻，調整為 0.7 提高靈敏度
+  if (confidence < 0.7) return;
+
+  if (state === 'START') {
+    if (label.includes('👌')) { 
+      state = 'PLAYING';
+      lastStateChangeTime = millis();
+    }
+  } else if (state === 'PLAYING') {
+    const moves = ['石頭', '剪刀', '布']; // 修改為猜拳手勢標籤
+    let matchedMove = moves.find(m => label.includes(m));
+    if (matchedMove) {
+      playerChoice = matchedMove;
+      aiChoice = random(['石頭', '剪刀', '布']); // AI 隨機出拳
+      calculateWinner();
+      state = 'RESULT';
+      lastStateChangeTime = millis();
+    }
+  } else if (state === 'RESULT') {
+    if (label.includes('🤟')) { 
+      resetGame();
+      lastStateChangeTime = millis();
+    }
+  }
+}
+
+function calculateWinner() {
+  if (playerChoice === aiChoice) {
+    resultText = "平手！";
+  } else if (
+    (playerChoice === '石頭' && aiChoice === '剪刀') ||
+    (playerChoice === '剪刀' && aiChoice === '布') ||
+    (playerChoice === '布' && aiChoice === '石頭')
+  ) {
+    resultText = "你贏了！✨";
+  } else {
+    resultText = "你輸了... 😭";
+  }
+}
+
+function resetGame() {
+  state = 'START';
+  playerChoice = '';
+  aiChoice = '';
+  resultText = '';
+>>>>>>> 6085f7feb9076282100f1c65409af5f613f5021c
 }
 
 function draw() {
@@ -246,6 +300,7 @@ function drawProgressBar() {
   text(`LEVEL ${currentLevel} / ${MAX_LEVELS}`, width/2, y + h + 25);
 }
 
+<<<<<<< HEAD
 /** 判斷玩家是否獲勝 */
 function isPlayerWinner(p, a) {
   return (p === "ROCK" && a === "SCISSORS") ||
@@ -266,6 +321,39 @@ function checkRPSResult() {
   } else {
     message = "你輸了... 進入補考...";
     totalLosses++;
+=======
+  // 中央/下方遊戲提示
+  textAlign(CENTER, CENTER);
+  
+  if (state === 'START') {
+    fill(0, 0, 0, 150);
+    rect(0, height - 100, width, 100);
+    fill(255);
+    textSize(28);
+    text("請比出 👌🏻 手勢開始遊戲", width / 2, height - 50);
+  } else if (state === 'PLAYING') {
+    fill(0, 0, 0, 150);
+    rect(0, height - 100, width, 100);
+    fill(255, 255, 0);
+    textSize(28);
+    text("請出拳！(剪刀、石頭、布)", width / 2, height - 50);
+  } else if (state === 'RESULT') {
+    // 結果狀態下，使用半透明大畫面凸顯勝負，但依然看得到後方相機
+    fill(0, 0, 0, 180);
+    rect(0, 50, width, height - 50);
+    
+    textSize(64);
+    fill(255, 215, 0);
+    text(resultText, width / 2, height / 2 - 60);
+    
+    textSize(32);
+    fill(255);
+    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2 + 20);
+    
+    textSize(20);
+    fill(200);
+    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 90);
+>>>>>>> 6085f7feb9076282100f1c65409af5f613f5021c
   }
 }
 
