@@ -301,22 +301,6 @@ function showQuizScreen() {
   }
 }
 
-/** 監聽滑鼠點擊，專門處理 QUIZ 狀態下的按鈕點擊 */
-function mousePressed() {
-  if (gameState === 'QUIZ' && currentQuestion) {
-    for (let i = 0; i < currentQuestion.a.length; i++) {
-      let btnW = 500;
-      let btnH = 50;
-      let bx = width/2 - btnW/2;
-      let by = height/2 + 20 + (i * 65);
-      if (mouseX > bx && mouseX < bx + btnW && mouseY > by && mouseY < by + btnH) {
-        handleQuizAnswer(i);
-        break;
-      }
-    }
-  }
-}
-
 function handleQuizAnswer(idx) {
   quizTotal++;
   if (idx === currentQuestion.correct) {
