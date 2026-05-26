@@ -1,327 +1,406 @@
-// Hand Pose Detection with ml5.js & Teachable Machine
-let classifier;
+// 教育科技剪刀石頭布闖關遊戲
 let video;
-let label = "等待辨識...";
-let confidence = 0;
-
-// Hand Pose 相關變數
 let handPose;
-let hands = []; // 儲存手部偵測結果
+let hands = [];
 
-// 系統狀態檢查
-let webglSupported = true;
-let videoStatus = "等待啟動..."; // "等待啟動...", "成功", "失敗"
-let modelStatus = "等待載入..."; // "等待載入...", "載入中", "成功", "失敗"
+// 遊戲流程狀態控制
+let gameState = 'START'; // START, PLAYING, PAUSED, QUIZ, GAMEOVER
+let currentLevel = 1;
+const MAX_LEVELS = 5;
 
-// 遊戲狀態：START (初始), PLAYING (遊戲中), RESULT (顯示結果)
-let state = 'START';
-let playerChoice = '';
-let aiChoice = '';
-let resultText = '';
+// 計時與統計數據
+let startTime = 0;
+let totalPlayTime = 0;
+let totalWins = 0;
+let totalLosses = 0;
+let totalDraws = 0;
+let quizCorrect = 0;
+let quizTotal = 0;
 
-// 新增控制變數
-let lastStateChangeTime = 0; // 記錄狀態切換時間
-const COOLDOWN_MS = 1500;    // 狀態切換後的冷卻時間（1.5秒），避免連續觸發
+// 猜拳相關變數
+let playerMove = "";
+let aiMove = "";
+let countdown = 3;
+let gameTimer = 0;
+let currentQuestion = null;
+let message = "";
+let roundOver = false;
 
-// ⚠️ 請記得將此處替換為您在 Teachable Machine 訓練好的模型連結
-const modelURL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
+/**
+ * 教育科技 (EdTech) 題庫
+ */
+const edTechQuestions = [
+  { q: "ADDIE 教學設計模式中的 'D' 包含哪兩項？", a: ["Design & Development", "Data & Digital", "Delivery & Design", "Define & Detail"], correct: 0 },
+  { q: "何謂「翻轉課堂 (Flipped Classroom)」的核心？", a: ["增加作業量", "課前自主學習，課中討論實作", "全面使用電子書", "遠距視訊教學"], correct: 1 },
+  { q: "TPACK 模式中，'P' 代表什麼知識？", a: ["人際關係", "心理學", "教學法 (Pedagogical)", "程式設計"], correct: 2 },
+  { q: "下列哪項是 AR (擴增實境) 在教育中的應用？", a: ["全虛擬環境模擬", "將數位資訊疊加於現實課本上", "單純觀看 2D 影片", "錄製語音筆記"], correct: 1 },
+  { q: "LMS 系統通常用於什麼？", a: ["硬體維修", "影片剪輯", "學習管理與課程追蹤", "美化教室佈置"], correct: 2 },
+  { q: "「混合式學習 (Blended Learning)」是指？", a: ["多種學科混合", "男女合校", "結合線上與面對面教學", "使用多種顏色筆記"], correct: 2 }
+];
 
 function preload() {
-  // 在 preload 載入 handPose 模型
-  handPose = ml5.handPose({ flipped: true }); // 啟用鏡像偵測
+  handPose = ml5.handPose({ flipped: true });
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight); // 改為全螢幕畫布
-  
-  // 檢查 WebGL 支援
-  const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-  if (!gl) {
-    webglSupported = false;
-    console.error("此裝置不支援 WebGL");
-    return;
-  }
-
-  // 1. 初始化相機 (加入鏡像設定)
-  try {
-    video = createCapture(VIDEO, { flipped: true }, (stream) => {
-      videoStatus = "成功";
-      console.log("相機啟動成功");
-      // 影片準備好後，開始 handPose 偵測
-      handPose.detectStart(video, gotHands);
-    });
-    video.size(640, 480);
-    video.hide();
-  } catch (e) {
-    videoStatus = "失敗"; 
-    console.error("無法存取相機:", e);
-  }
-
-  // 3. 載入模型並處理回饋
-  if (modelURL.includes("YOUR_MODEL_ID")) {
-    modelStatus = "未設定URL";
-    return;
-  }
-
-  modelStatus = "載入中...";
-  classifier = ml5.imageClassifier(modelURL + 'model.json', (err) => {
-    if (err) {
-      console.error(err);
-      modelStatus = "失敗";
-    } else {
-      modelStatus = "成功";
-      classifyVideo();
-    }
+  // 設定為全螢幕
+  createCanvas(windowWidth, windowHeight);
+  video = createCapture(VIDEO, { flipped: true });
+  video.size(windowWidth, windowHeight);
+  video.hide();
+  handPose.detectStart(video, (results) => {
+    hands = results;
   });
+  textAlign(CENTER, CENTER);
+  textSize(24);
 }
 
-// handPose 偵測結果的回呼函式
-function gotHands(results) {
-  hands = results; // 更新偵測到的手部資料
-}
-
-function classifyVideo() {
-  if (videoStatus === "成功" && modelStatus === "成功") {
-    classifier.classify(video, gotResult);
-  }
-}
-
-function gotResult(results, error) {
-  if (error) {
-    console.error(error);
-    return;
-  }
-  if (results && results.length > 0) {
-    label = results[0].label;
-    confidence = results[0].confidence;
-    
-    // 根據辨識結果更新遊戲邏輯
-    updateGameState();
-  }
-  
-  // 繼續下一幀的辨識
-  classifyVideo();
-}
-
-// 當視窗大小改變（如手機轉向）時，自動調整畫布大小
+// 當視窗調整大小時，更新畫布與視訊尺寸
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-}
-
-function updateGameState() {
-  // 如果還在冷卻時間內，不處理新狀態
-  if (millis() - lastStateChangeTime < COOLDOWN_MS) return;
-
-  // 設定信心門檻，調整為 0.7 提高靈敏度
-  if (confidence < 0.7) return;
-
-  if (state === 'START') {
-    if (label.includes('👌')) { 
-      state = 'PLAYING';
-      lastStateChangeTime = millis();
-    }
-  } else if (state === 'PLAYING') {
-    const moves = ['1', '2', '3']; // 修改為數字手勢標籤
-    let matchedMove = moves.find(m => label.includes(m));
-    if (matchedMove) {
-      playerChoice = matchedMove;
-      aiChoice = random(moves); // AI 隨機出拳
-      calculateWinner();
-      state = 'RESULT';
-      lastStateChangeTime = millis();
-    }
-  } else if (state === 'RESULT') {
-    if (label.includes('🤟')) { 
-      resetGame();
-      lastStateChangeTime = millis();
-    }
-  }
-}
-
-function calculateWinner() {
-  // 將字串轉為數字進行比大小
-  let p = parseInt(playerChoice);
-  let a = parseInt(aiChoice);
-
-  if (p === a) {
-    resultText = "平手！";
-  } else if (p > a) {
-    resultText = "你贏了！✨";
-  } else {
-    resultText = "你輸了... 😭";
-  }
-}
-
-function resetGame() {
-  state = 'START';
-  playerChoice = '';
-  aiChoice = '';
-  resultText = '';
+  video.size(windowWidth, windowHeight);
 }
 
 function draw() {
-  background(0);
+  image(video, 0, 0, width, height);
+  
+  // 取得當前手勢辨識結果
+  let gesture = getGesture();
 
-  // --- 系統相容性檢查 ---
-  if (!webglSupported) {
-    fill(255, 0, 0);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("❌ 您的瀏覽器不支援 WebGL\nAI 功能無法執行", width / 2, height / 2);
+  // 狀態機邏輯
+  if (gameState === 'START') {
+    showStartScreen(gesture);
+  } else if (gameState === 'PAUSED') {
+    showPausedScreen(gesture);
+  } else if (gameState === 'PLAYING') {
+    runGameLogic(gesture);
+  } else if (gameState === 'QUIZ') {
+    showQuizScreen();
+  } else if (gameState === 'GAMEOVER') {
+    showEndScreen();
+  }
+  
+  // 繪製手部骨架協助玩家視覺參考
+  drawSkeleton();
+}
+
+/** 繪製帶有科技感濾鏡的視訊背景 */
+function drawDynamicBackground() {
+  push();
+  // 繪製背景視訊
+  image(video, 0, 0, width, height);
+  
+  // 加上深藍科技感漸層遮罩 (Vignette 效果)
+  let c1 = color(0, 20, 50, 100);
+  let c2 = color(10, 10, 30, 200);
+  noStroke();
+  for (let i = 0; i < 20; i++) {
+    let inter = map(i, 0, 20, 0, 1);
+    fill(lerpColor(c1, c2, inter));
+    rect(0, (i * height) / 20, width, height / 20);
+  }
+  pop();
+}
+
+/**
+ * 手勢辨識核心邏輯
+ * 使用指尖與指節的 Y 座標相對關係判斷手指開合
+ */
+function getGesture() {
+  if (hands.length === 0) return "NONE";
+  
+  let hand = hands[0];
+  let keypoints = hand.keypoints;
+
+  // 判斷手指是否伸直 (座標系中 Y 越小代表越高)
+  // 指尖 index: 大拇指(4), 食指(8), 中指(12), 無名指(16), 小指(20)
+  let thumbUp  = keypoints[4].y < keypoints[3].y;
+  let indexUp  = keypoints[8].y < keypoints[6].y;
+  let middleUp = keypoints[12].y < keypoints[10].y;
+  let ringUp   = keypoints[16].y < keypoints[14].y;
+  let pinkyUp  = keypoints[20].y < keypoints[18].y;
+
+  // 🛠️ 修正：增加大拇指張開程度的判斷
+  // 計算大拇指尖(4)到食指指根(5)的距離，並與掌心大小做比例參考
+  let palmSize = dist(keypoints[0].x, keypoints[0].y, keypoints[9].x, keypoints[9].y);
+  let thumbIsOut = dist(keypoints[4].x, keypoints[4].y, keypoints[5].x, keypoints[5].y) > palmSize * 0.8;
+
+  // 1. 👍 大拇指比讚：大拇指向上且「張開」，其他手指收起
+  if (thumbUp && thumbIsOut && !indexUp && !middleUp && !ringUp && !pinkyUp) return "THUMBS_UP";
+
+  // 2. 🤘 搖滾手勢：食指與小指伸直，中指與無名指收起
+  if (indexUp && pinkyUp && !middleUp && !ringUp) return "ROCK_ON";
+
+  // 3. ✊ 石頭：食指、中指、無名指、小指皆收起
+  // 只要這四根手指收好，就算大拇指疊在上面也會被判定為石頭
+  if (!indexUp && !middleUp && !ringUp && !pinkyUp) return "ROCK";
+
+  // 4. 🖐️ 布：所有手指伸直
+  if (indexUp && middleUp && ringUp && pinkyUp) return "PAPER";
+
+  // 5. ✌️ 剪刀：食指與中指伸直，其他收起
+  if (indexUp && middleUp && !ringUp && !pinkyUp) return "SCISSORS";
+
+  return "UNKNOWN";
+}
+
+function showStartScreen(gesture) {
+  drawOverlay("EdTech 猜拳大冒險", "比出 👍 開始 5 關挑戰！贏了晉級，輸了則需完成挑戰題。");
+  fill(255);
+  textSize(22);
+  text("偵測中：等待 👍 手勢...", width/2, height/2 + 80);
+  
+  if (gesture === "THUMBS_UP") { // 偵測到 👍 手勢，開始遊戲
+    gameState = 'PLAYING';
+    startTime = millis();
+    currentLevel = 1;
+    resetRound();
+  }
+}
+
+function showPausedScreen(gesture) {
+  drawOverlay("時空凍結", "偵測到 🤘 暫停手勢");
+  text("放開手勢即可恢復冒險", width/2, height/2 + 80);
+  if (gesture !== "ROCK_ON") {
+    gameState = 'PLAYING';
+  }
+}
+
+function runGameLogic(gesture) {
+  // 檢測暫停手勢
+  if (gesture === "ROCK_ON") {
+    gameState = 'PAUSED';
     return;
   }
 
-  // --- 1. 繪製攝影機畫面與骨架 ---
-  if (video && video.elt && video.elt.readyState >= 2) {
+  drawProgressBar();
+
+  // 倒數計時邏輯
+  if (millis() - gameTimer > 1000 && countdown > 0) {
+    countdown--;
+    gameTimer = millis();
+  }
+
+  if (countdown > 0) {
+    fill(255, 215, 0);
+    textSize(160);
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = 'white';
+    text(countdown, width/2, height/2);
+    drawingContext.shadowBlur = 0;
+  } else {
+    // 出拳判斷
+    if (!roundOver) {
+      playerMove = (gesture === "ROCK" || gesture === "PAPER" || gesture === "SCISSORS") ? gesture : "MISS";
+      aiMove = random(["ROCK", "PAPER", "SCISSORS"]);
+      checkRPSResult();
+      roundOver = true;
+    }
+    
+    // 顯示結果 2 秒後進入下一階段
+    let matchResult = `${getEmoji(playerMove)}  VS  ${getEmoji(aiMove)}`;
+    drawOverlay("回合結果", matchResult);
+    
+    // --- 霓虹燈閃爍效果文字 ---
     push();
-    // 因為 createCapture 已設定 flipped: true，這裡直接畫即可
-    image(video, 0, 0, width, height);
+    let flicker = map(sin(frameCount * 0.4), -1, 1, 100, 255); // 快速閃爍
+    drawingContext.shadowBlur = 25; // 發光半徑
+    drawingContext.shadowColor = color(255, 255, 0); // 發光顏色 (黃色)
+    textSize(48); // 稍微放大更醒目
+    fill(255, 255, 0, flicker); // 套用閃爍透明度
+    text(message, width/2, height/2 + 100);
+    pop();
 
-    // --- 繪製手部骨架 (結合您提供的邏輯) ---
-    if (hands.length > 0) {
-      let scaleX = width / video.width;
-      let scaleY = height / video.height;
-
-      for (let hand of hands) {
-        if (hand.confidence > 0.1) {
-          let keypoints = hand.keypoints;
-          
-          // 根據左右手設定顏色 (Left: 粉紅, Right: 黃色)
-          let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
-
-          // 1. 繪製線條連線 (依照要求: 0-4, 5-8, 9-12, 13-16, 17-20)
-          stroke(handColor);
-          strokeWeight(3);
-          
-          // 定義手指關鍵點區間
-          let fingerParts = [
-            [0, 1, 2, 3, 4],    // 大拇指
-            [5, 6, 7, 8],       // 食指
-            [9, 10, 11, 12],    // 中指
-            [13, 14, 15, 16],   // 無名指
-            [17, 18, 19, 20]    // 小拇指
-          ];
-
-          for (let part of fingerParts) {
-            for (let j = 0; j < part.length - 1; j++) {
-              let p1 = keypoints[part[j]];
-              let p2 = keypoints[part[j + 1]];
-              line(p1.x * scaleX, p1.y * scaleY, p2.x * scaleX, p2.y * scaleY);
-            }
-          }
-
-          // 2. 繪製圓圈
-          noStroke();
-          fill(handColor);
-          for (let i = 0; i < keypoints.length; i++) {
-            let keypoint = keypoints[i];
-            circle(keypoint.x * scaleX, keypoint.y * scaleY, 10);
-          }
+    if (millis() - gameTimer > 2000) {
+      if (playerMove !== "MISS" && playerMove !== aiMove && isPlayerWinner(playerMove, aiMove)) {
+        currentLevel++;
+        if (currentLevel > MAX_LEVELS) {
+          totalPlayTime = (millis() - startTime) / 1000;
+          gameState = 'GAMEOVER';
+        } else {
+          resetRound();
         }
+      } else {
+        // 輸或平手，觸發挑戰題
+        currentQuestion = random(edTechQuestions);
+        gameState = 'QUIZ';
       }
     }
-    pop(); 
-  } else {
-    fill(255, 255, 0);
-    // 即使沒有攝影機畫面，也要顯示背景，避免手機瀏覽器出現奇怪的殘影
-    background(0);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("🎥 正在等待攝影機畫面...", width / 2, height / 2);
-    
-    // 如果 WebGPU 警告導致延遲，這裡提供一個手動啟動的提示
-    if (frameCount > 300) { // 如果 5 秒後還沒畫面
-      textSize(16);
-      text("若畫面長時間未出現，請檢查攝影機權限或重新整理", width / 2, height / 2 + 40);
-    }
-    return;
   }
+}
 
-  // --- 2. 模型狀態提示 ---
-  if (videoStatus === "失敗") {
-    fill(255, 0, 0);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("❌ 找不到攝影機\n請確認權限設定並使用 HTTPS", width / 2, height / 2);
-    return;
-  }
-
-  if (modelStatus === "未設定URL") {
-    fill(255, 255, 0);
-    rectMode(CENTER);
-    fill(0, 0, 0, 180);
-    rect(width/2, height/2, 500, 100, 10);
-    fill(255, 255, 0);
-    textAlign(CENTER, CENTER);
-    textSize(18);
-    text("⚠️ 請先在程式碼中替換 modelURL\n為你在 Teachable Machine 訓練好的連結", width / 2, height / 2);
-    return;
-  } else if (modelStatus === "載入中...") {
-    fill(0, 0, 0, 150);
-    rect(0, 0, width, height);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("🧠 模型載入中，請稍候...", width / 2, height / 2);
-    return; 
-  } else if (modelStatus === "失敗") {
-    fill(255, 0, 0);
-    textAlign(CENTER, CENTER);
-    textSize(24);
-    text("❌ 模型載入失敗\n請檢查 URL 或網路連線", width / 2, height / 2);
-    return; 
-  }
-
-  // --- 3. 遊戲互動 UI (改為「局部黑色遮罩」或降低透明度，避免全畫面被蓋死) ---
-  // 上方黑條：顯示辨識偵測狀態
+/** 繪製關卡進度條 */
+function drawProgressBar() {
+  let w = width * 0.4;
+  let h = 20;
+  let x = (width - w) / 2;
+  let y = 50;
+  fill(255, 50);
   noStroke();
-  fill(0, 0, 0, 120);
-  rect(0, 0, width, 50);
-  
-  textAlign(LEFT, CENTER);
-  textSize(16);
-  fill(0, 255, 0);
-  text(`[AI 偵測狀態] 當前特徵: ${label}  |  信心度: ${(confidence * 100).toFixed(1)}%`, 20, 25);
+  rect(x, y, w, h, 10);
+  let progressW = map(currentLevel - 1, 0, MAX_LEVELS, 0, w);
+  fill(0, 255, 153);
+  rect(x, y, progressW, h, 10);
+  fill(255);
+  textSize(20);
+  text(`LEVEL ${currentLevel} / ${MAX_LEVELS}`, width/2, y + h + 25);
+}
 
-  // 中央/下方遊戲提示
-  textAlign(CENTER, CENTER);
-  
-  if (state === 'START') {
-    fill(0, 0, 0, 150);
-    rect(0, height - 100, width, 100);
-    fill(255);
-    textSize(28);
-    text("請比出 👌 手勢開始數字比大小", width / 2, height - 50);
-  } else if (state === 'PLAYING') {
-    fill(0, 0, 0, 150);
-    rect(0, height - 100, width, 100);
-    fill(255, 255, 0);
-    textSize(28);
-    text("請出數字！(1、2、3)", width / 2, height - 50);
-  } else if (state === 'RESULT') {
-    // 結果狀態下，使用半透明大畫面凸顯勝負，但依然看得到後方相機
-    fill(0, 0, 0, 180);
-    rect(0, 50, width, height - 50);
-    
-    textSize(64);
-    fill(255, 215, 0);
-    text(resultText, width / 2, height / 2 - 60);
-    
-    textSize(32);
-    fill(255);
-    text(`你：${playerChoice}  vs  AI：${aiChoice}`, width / 2, height / 2 + 20);
-    
-    textSize(20);
-    fill(200);
-    text("比出 🤟 手勢回到主畫面", width / 2, height / 2 + 90);
+/** 判斷玩家是否獲勝 */
+function isPlayerWinner(p, a) {
+  return (p === "ROCK" && a === "SCISSORS") ||
+         (p === "PAPER" && a === "ROCK") ||
+         (p === "SCISSORS" && a === "PAPER");
+}
+
+function checkRPSResult() {
+  if (playerMove === "MISS") {
+    message = "偵測失敗！進入補考...";
+    totalLosses++;
+  } else if (playerMove === aiMove) {
+    message = "平手！進入補考...";
+    totalDraws++;
+  } else if (isPlayerWinner(playerMove, aiMove)) {
+    message = "你贏了！晉級！";
+    totalWins++;
+  } else {
+    message = "你輸了... 進入補考...";
+    totalLosses++;
   }
+}
 
-  // 4. 顯示冷卻進度條
-  let progress = (millis() - lastStateChangeTime) / COOLDOWN_MS;
-  if (progress < 1.0) {
+function showQuizScreen() {
+  drawOverlay("教育科技 補考挑戰", currentQuestion.q);
+  fill(255);
+  textSize(22);
+  
+  // 繪製具有邊框的選項按鈕
+  for (let i = 0; i < currentQuestion.a.length; i++) {
+    let btnW = 500;
+    let btnH = 50;
+    let bx = width/2 - btnW/2;
+    let by = height/2 + 20 + (i * 65);
+    
+    // 偵測滑鼠是否在按鈕內
+    let isHover = mouseX > bx && mouseX < bx + btnW && mouseY > by && mouseY < by + btnH;
+    
+    push();
+    stroke(255);
+    strokeWeight(2);
+    if (isHover) {
+      fill(255, 255, 0);
+    } else {
+      fill(0, 0, 0, 100); // 平時半透明黑
+    }
+    rect(bx, by, btnW, btnH, 10);
+    
     noStroke();
-    fill(0, 255, 0, 200);
-    rect(0, height - 8, width * progress, 8);
+    fill(isHover ? 0 : 255);
+    text(currentQuestion.a[i], width/2, by + btnH/2);
+    pop();
+
+    if (isHover && mouseIsPressed) {
+      handleQuizAnswer(i);
+      return;
+    }
+  }
+}
+
+function handleQuizAnswer(idx) {
+  quizTotal++;
+  if (idx === currentQuestion.correct) {
+    quizCorrect++;
+    alert("答對了！重新挑戰本關。");
+  } else {
+    alert("答錯了！繼續留在本關重新挑戰。");
+  }
+  resetRound();
+  gameState = 'PLAYING';
+  mouseIsPressed = false; // 防止連續點擊
+}
+
+function showEndScreen() {
+  drawOverlay("挑戰達成！恭喜通關", "你已完成所有科技冒險，成績如下：");
+  let mins = Math.floor(totalPlayTime / 60);
+  let secs = Math.floor(totalPlayTime % 60);
+  let accuracy = quizTotal === 0 ? 0 : ((quizCorrect / quizTotal) * 100).toFixed(1);
+
+  fill(255);
+  textSize(22);
+  text(`⏱️ 總用時：${mins}分 ${secs}秒`, width/2, height/2 + 40);
+  text(`🥊 戰績：${totalWins}勝 / ${totalLosses}負 / ${totalDraws}平`, width/2, height/2 + 75);
+  text(`🎯 答題正確率：${accuracy}%`, width/2, height/2 + 110);
+  
+  fill(0, 255, 153);
+  text("按 F5 重新開始挑戰", width/2, height/2 + 160);
+}
+
+function resetRound() {
+  countdown = 3;
+  playerMove = "";
+  aiMove = "";
+  gameTimer = millis();
+  roundOver = false;
+}
+
+/** 美化的全螢幕對話框 */
+function drawOverlay(title, content) {
+  let boxW = width * 0.8;
+  let boxH = height * 0.7;
+  
+  fill(0, 0, 0, 220);
+  stroke(255);
+  strokeWeight(3);
+  rect((width - boxW)/2, (height - boxH)/2, boxW, boxH, 20);
+  
+  noStroke();
+  fill(255, 255, 0);
+  textSize(36);
+  text(title, width/2, height/2 - boxH/2 + 60);
+  
+  fill(255);
+  textSize(26);
+  textWrap(WORD);
+  text(content, width/2 - boxW/2 + 40, height/2 - 20, boxW - 80);
+}
+
+function getEmoji(move) {
+  if (move === "ROCK") return "石頭 ✊";
+  if (move === "PAPER") return "布 🖐️";
+  if (move === "SCISSORS") return "剪刀 ✌️";
+  return "❔";
+}
+
+function drawSkeleton() {
+  if (hands.length > 0) {
+    for (let hand of hands) {
+      let handColor = hand.handedness === "Left" ? color(255, 0, 255) : color(255, 255, 0);
+      stroke(handColor);
+      strokeWeight(2);
+      
+      // 定義手指連線邏輯
+      let parts = [
+        [0, 1, 2, 3, 4],    // 大拇指
+        [5, 6, 7, 8],       // 食指
+        [9, 10, 11, 12],    // 中指
+        [13, 14, 15, 16],   // 無名指
+        [17, 18, 19, 20],   // 小指
+        [0, 5, 9, 13, 17, 0] // 掌心
+      ];
+
+      for (let part of parts) {
+        for (let i = 0; i < part.length - 1; i++) {
+          let p1 = hand.keypoints[part[i]];
+          let p2 = hand.keypoints[part[i + 1]];
+          line(p1.x, p1.y, p2.x, p2.y);
+        }
+      }
+      
+      noStroke();
+      fill(handColor);
+      for (let kp of hand.keypoints) {
+        circle(kp.x, kp.y, 6);
+      }
+    }
   }
 }
